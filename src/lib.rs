@@ -6,7 +6,8 @@ when this is dropped. Changes back be rolled back to the last commit with [`Tx::
 
 # Example
 ```
-# use tx::Tx;
+use tx::Tx;
+
 #[derive(Clone)]
 struct S { d: Vec<u32> }
 impl S {
@@ -112,6 +113,52 @@ impl<'a, T> std::borrow::BorrowMut<T> for Tx<'a, T> {
     }
 }
 
+/** A trait to provide [`Tx::tx`](./struct.Tx.html#method.tx) on `&mut T`
+
+```
+use tx::AsTx;
+
+let mut s = vec![];
+{
+    let mut s = s.tx();
+    s.push(1);
+    assert_eq!(*s, vec![1]);
+}
+assert_eq!(s, vec![]);
+{
+    let mut s = s.tx();
+    s.push(1);
+    s.commit();
+    assert_eq!(*s, vec![1]);
+}
+assert_eq!(s, vec![1]);
+{
+    let mut s = s.tx();
+    s.push(2);
+    s.commit();
+    assert_eq!(*s, vec![1, 2]);
+    s.push(3);
+    assert_eq!(*s, vec![1, 2, 3]);
+    s.rollback();
+    assert_eq!(*s, vec![1, 2]);
+}
+assert_eq!(s, vec![1, 2]);
+```
+*/
+pub trait AsTx
+where
+    Self: Sized,
+{
+    /// Create a transaction for this type
+    fn tx(&mut self) -> Tx<'_, Self>;
+}
+
+impl<T: Clone> AsTx for T {
+    fn tx(&mut self) -> Tx<'_, Self> {
+        Tx::new(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,5 +224,35 @@ mod tests {
             assert_eq!(s.d, vec![]);
         }
         assert_eq!(s.d, vec![1]);
+    }
+
+    #[test]
+    fn as_tx() {
+        use super::AsTx;
+        let mut s = vec![];
+        {
+            let mut s = s.tx();
+            s.push(1);
+            assert_eq!(*s, vec![1]);
+        }
+        assert_eq!(s, vec![]);
+        {
+            let mut s = s.tx();
+            s.push(1);
+            s.commit();
+            assert_eq!(*s, vec![1]);
+        }
+        assert_eq!(s, vec![1]);
+        {
+            let mut s = s.tx();
+            s.push(2);
+            s.commit();
+            assert_eq!(*s, vec![1, 2]);
+            s.push(3);
+            assert_eq!(*s, vec![1, 2, 3]);
+            s.rollback();
+            assert_eq!(*s, vec![1, 2]);
+        }
+        assert_eq!(s, vec![1, 2]);
     }
 }
